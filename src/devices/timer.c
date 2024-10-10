@@ -94,16 +94,12 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  // while (timer_elapsed (start) < ticks) 
-  //   thread_yield ();
   if(ticks>0)
     {
       struct thread *cur_thread = thread_current();
       cur_thread->sleep_until = start + ticks;
       sema_init(&cur_thread->sleep_sema, 0);
-      enum intr_level old_level = intr_disable();
       list_push_back(&sleep_list, &cur_thread->sleep_elem);
-      intr_set_level(old_level);
       sema_down(&cur_thread->sleep_sema);
     }
 }
