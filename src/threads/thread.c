@@ -352,7 +352,7 @@ thread_set_priority (int new_priority)
   int curThread_oldPrior = thread_current()->priority;
   thread_current ()->priority = new_priority;
   struct thread *thread_highPrior = !list_empty(&ready_list) ? list_entry(list_front(&ready_list), struct thread, elem): NULL;
-  if (new_priority < curThread_oldPrior && thread_highPrior->priority > thread_current()->priority) {
+  if (new_priority < curThread_oldPrior && thread_highPrior->priority > thread_current()->priority && !list_empty(&ready_list)) {
         thread_yield();    
   }
 }
