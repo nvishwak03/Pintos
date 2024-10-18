@@ -6,24 +6,6 @@
 #include <stdint.h>
 #include "threads/synch.h"
 
-//multiple priority donation working
-struct locksAndPriorities_elem
-{
-  struct lock *lock;
-  int priority;
-  struct list_elem elem;
-};
-struct waiting_locks_elem
-{
-  struct lock *lock;
-  struct list_elem elem;
-};
-struct thread_lock_list_elem
-{
-  struct thread *thread;
-  struct lock *lock;
-  struct list_elem elem;
-};
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -107,11 +89,11 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int first_priority;                       /* Priority. that was given at the time of creation and not donated */
+    int actual_priority;
     int64_t sleep_until;
     struct list_elem allelem;           /* List element for all threads list. */
-    struct list locksAndPriorities;
-    struct list waiting_locks;          /*all the locks the thread is waiting for */
+    struct list priority_locks;
+    struct list pending_locks;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct semaphore sleep_sema;
@@ -125,6 +107,24 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct priority_lock_elem
+{
+  struct list_elem elem;
+  struct lock *lock;
+  int priority;
+};
+struct pending_lock_elem
+{
+  struct list_elem elem;
+  struct lock *lock;
+};
+struct thread_held_lock_elem
+{
+  struct list_elem elem;
+  struct lock *lock;
+  struct thread *thread; 
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -163,6 +163,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 bool compare_priority(const struct list_elem *elem1,const struct list_elem *elem2, void *args);
-bool not_compare_priority(const struct list_elem *elem1,const struct list_elem *elem2, void *args);
+bool inverse_compare_priority(const struct list_elem *elem1,const struct list_elem *elem2, void *args);
 
 #endif /* threads/thread.h */

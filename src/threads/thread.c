@@ -214,7 +214,7 @@ compare_priority(const struct list_elem *elem1, const struct list_elem *elem2, v
   return thread_a->priority > thread_b->priority;
 }
 
-bool not_compare_priority(const struct list_elem *elem1,const struct list_elem *elem2, void *args UNUSED)
+bool inverse_compare_priority(const struct list_elem *elem1,const struct list_elem *elem2, void *args UNUSED)
 {
  const struct thread *thread_a = list_entry(elem1, struct thread, elem);
   const struct thread *thread_b = list_entry(elem2, struct thread, elem);
@@ -355,9 +355,8 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current()->first_priority = new_priority;
-  //if there are any other thread that are waiting for a lock held by the current thread with more priority that the previous priority of t then do not update the current priority of t. let it be as specified by the other threads. IF THE NEW PRIORITY IS MORE THAN THAT THEN ALSO
-  if (list_empty(&thread_current()->locksAndPriorities)){
+  thread_current()->actual_priority = new_priority;
+  if (list_empty(&thread_current()->priority_locks)){
     thread_current()->priority = new_priority;
     list_sort(&ready_list,&compare_priority,NULL);
       if (!list_empty(&ready_list) && new_priority<list_entry(list_front(&ready_list),struct thread, elem)->priority)
@@ -488,10 +487,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->first_priority = priority;
+  t-> actual_priority = priority;
   t->priority = priority;
-  list_init(&t->waiting_locks);
-  list_init(&t->locksAndPriorities);
+  list_init(&t->pending_locks);
+  list_init(&t->priority_locks);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
