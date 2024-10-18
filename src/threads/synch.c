@@ -116,8 +116,9 @@ sema_up (struct semaphore *sema)
   sema->value++;
   if (!list_empty (&sema->waiters))
   {
+    struct thread *t;
     list_sort(&sema->waiters,&compare_priority,NULL);
-    struct thread *t=list_entry (list_pop_front (&sema->waiters), struct thread, elem);
+    t=list_entry (list_pop_front (&sema->waiters), struct thread, elem);
     thread_unblock(t);
   }
   intr_set_level (old_level);
@@ -205,22 +206,22 @@ lock_acquire (struct lock *lock)
     w->lock=lock;
     list_push_back(&thread_current()->waiting_locks,&w->elem);
 
-    //priority donation
     if ( (lock->holder)->priority<thread_current()->priority)
     {
-      int exist=0;
-      struct list_elem *e;
-      for ( e = list_begin (&lock->holder->locksAndPriorities); e != list_end (&lock->holder->locksAndPriorities);  e = list_next (e))
+      bool exist= false;
+      struct list_elem *e = list_begin(&lock->holder->locksAndPriorities);
+      while (e != list_end(&lock->holder->locksAndPriorities)) 
       {
-        struct locksAndPriorities_elem *s=list_entry(e,struct locksAndPriorities_elem, elem);
-        if (s->lock==lock)
-        {
-          s->priority=thread_current()->priority;
-          exist=1;
-          break;
-        }
+          struct locksAndPriorities_elem *s = list_entry(e, struct locksAndPriorities_elem, elem);
+          if (s->lock == lock) 
+          {
+              s->priority = thread_current()->priority;
+              exist = true;
+              break;
+          }
+          e = list_next(e);
       }
-      if (exist==0)
+      if (!exist)
       {
         struct locksAndPriorities_elem *s= malloc (sizeof (struct locksAndPriorities_elem) );
         s->lock=lock;
@@ -233,49 +234,49 @@ lock_acquire (struct lock *lock)
       st->thread=lock->holder;
       st->lock=lock;
       list_push_back(&queue, &st->elem);
-      while (!list_empty(&queue))
+      while (!list_empty(&queue)) 
       {
-        struct thread_lock_list_elem *t=list_entry(list_pop_front(&queue), struct thread_lock_list_elem, elem);
-        if (t->thread->priority<thread_current()->priority)
-        {
-          t->thread->priority=thread_current()->priority;
-          struct list_elem *el;
-          for ( el = list_begin (&t->thread->locksAndPriorities); el != list_end (&t->thread->waiting_locks);  el = list_next (el))
+          struct thread_lock_list_elem *t = list_entry(list_pop_front(&queue), struct thread_lock_list_elem, elem);
+          if (t->thread->priority < thread_current()->priority) 
           {
-            struct locksAndPriorities_elem *lp=list_entry(el, struct locksAndPriorities_elem,elem);
-            if (lp->lock==t->lock)
-            {
-              lp->priority=thread_current()->priority;
-              break;
-            }
+              t->thread->priority = thread_current()->priority;
+              struct list_elem *el = list_begin(&t->thread->locksAndPriorities);
+              while (el != list_end(&t->thread->waiting_locks)) 
+              {
+                  struct locksAndPriorities_elem *lp=list_entry(el, struct locksAndPriorities_elem,elem);
+                  if (lp->lock==t->lock) 
+                  {
+                      lp->priority=thread_current()->priority;
+                      break;
+                  }
+                  el = list_next(el);
+              }
           }
-        }
-        struct list_elem *e;
-        for ( e = list_begin (&t->thread->waiting_locks); e != list_end (&t->thread->waiting_locks);  e = list_next (e))
-        {
-          struct waiting_locks_elem *ws=list_entry(e,struct waiting_locks_elem, elem);
-          struct thread_lock_list_elem *st=malloc(sizeof(struct thread_lock_list_elem));
-          st->thread=ws->lock->holder;
-          st->lock=ws->lock;
-          list_push_back(&queue, &st->elem);
-        }
-        free(t);
+
+          struct list_elem *e;
+          for (e = list_begin(&t->thread->waiting_locks); e != list_end(&t->thread->waiting_locks); e = list_next(e)) 
+          {
+              struct waiting_locks_elem *ws = list_entry(e, struct waiting_locks_elem, elem);
+              struct thread_lock_list_elem *st = (struct thread_lock_list_elem *)malloc(sizeof(struct thread_lock_list_elem));
+              *st = (struct thread_lock_list_elem){ .thread = ws->lock->holder, .lock = ws->lock };
+              list_push_back(&queue, &st->elem);
+          }
+          free(t);
       }
     }
   }
   sema_down (&lock->semaphore);
-  struct list_elem *e;
-  for ( e = list_begin (&thread_current()->waiting_locks); e != list_end (&thread_current()->waiting_locks);  e = list_next (e))
-  {
-    struct waiting_locks_elem *w=list_entry(e,struct waiting_locks_elem, elem);
-    if (w->lock==lock)
-    {
-      list_remove(e);
-      free(w);
-      break;
-    }
+  struct list_elem *e = list_begin(&thread_current()->waiting_locks);
+  while (e != list_end(&thread_current()->waiting_locks)) {
+      struct waiting_locks_elem *w = list_entry(e, struct waiting_locks_elem, elem);
+      if (w->lock==lock){
+          list_remove(e);
+          free(w);
+          break;
+      }
+      e = list_next(e);
   }
-  lock->holder = thread_current ();
+  lock->holder = thread_current();
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -309,7 +310,6 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  //priority restoration
   struct list_elem *e;
   for ( e = list_begin (&lock->holder->locksAndPriorities); e != list_end (&lock->holder->locksAndPriorities);  e = list_next (e))
   {
@@ -318,17 +318,7 @@ lock_release (struct lock *lock)
     {
       list_remove(e);
       free(s);
-      if (list_empty(&lock->holder->locksAndPriorities))
-      {
-        lock->holder->priority=lock->holder->first_priority;
-      }
-      else
-      {
-        struct list_elem *e=(list_max(&lock->holder->locksAndPriorities,&not_compare_priority, NULL));
-        struct locksAndPriorities_elem *sl=list_entry(e,struct locksAndPriorities_elem,elem);
-        lock->holder->priority=sl->priority;
-      }
-
+      lock->holder->priority = list_empty(&lock->holder->locksAndPriorities) ? lock->holder->first_priority : list_entry(list_max(&lock->holder->locksAndPriorities, &not_compare_priority, NULL), struct locksAndPriorities_elem, elem)->priority;
       break;
     }
   }
