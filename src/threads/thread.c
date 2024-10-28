@@ -259,7 +259,7 @@ thread_unblock (struct thread *t)
   list_insert_ordered (&ready_list, &t->elem,&compare_priority,NULL);
   t->status = THREAD_READY;
   if (thread_current() != idle_thread && !thread_mlfqs) {
-    (thread_current()->priority < t->priority) ? thread_yield() : (void)0;
+    (thread_current()->priority < t->priority) ? (intr_context() ? intr_yield_on_return() :thread_yield()): (void)0;
 }
   intr_set_level (old_level);
 }
