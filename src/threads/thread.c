@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -36,6 +37,7 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+static fixed_point load_avg;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -256,7 +258,7 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_insert_ordered (&ready_list, &t->elem,&compare_priority,NULL);
   t->status = THREAD_READY;
-  if (thread_current() != idle_thread) {
+  if (thread_current() != idle_thread && !thread_mlfqs) {
     (thread_current()->priority < t->priority) ? thread_yield() : (void)0;
 }
   intr_set_level (old_level);
@@ -350,7 +352,29 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
+void updatePriority(struct thread* t){
+    t->priority = CONVERT_FP_TO_INT(SUBTRACTING_FP_AND_INT(SUBTRACTING_FP(CONVERT_INT_TO_FP(PRI_MAX), DIVIDE_FP_WITH_INT(t->recent_cpu, 4)), 2 * t->nice));
+}
 
+void updatePriorities(){
+  struct list_elem *e;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        updatePriority(t);
+    }
+}
+
+void updateLoadAvgRecentCpu(){
+  int size =(thread_current() != idle_thread)? list_size(&ready_list)+1: list_size(&ready_list);
+  load_avg = ADDING_FP (DIVIDE_FP_WITH_INT (MULTIPLY_FP_WITH_INT (load_avg, 59), 60), DIVIDE_FP_WITH_INT (CONVERT_INT_TO_FP (size), 60));
+
+  struct list_elem *e;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+        struct thread *t = list_entry(e, struct thread, allelem);
+         t->recent_cpu = ADDING_FP_AND_INT (MULTIPLY_FP (DIVIDING_FP (MULTIPLY_FP_WITH_INT (load_avg, 2), ADDING_FP_AND_INT (MULTIPLY_FP_WITH_INT (load_avg, 2), 1)), t->recent_cpu), t->nice);
+          updatePriority(t);
+    }
+}
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -375,31 +399,29 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+    thread_current()->nice = nice;
+    updatePriority(thread_current());
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+    return ROUNDING_FP_TO_INT(MULTIPLY_FP_WITH_INT(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return ROUNDING_FP_TO_INT (MULTIPLY_FP_WITH_INT (thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -482,7 +504,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+  load_avg=0;
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
